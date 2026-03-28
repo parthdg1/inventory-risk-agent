@@ -1,0 +1,11 @@
+SKU,Product,Current_Stock,Weekly_Demand,Lead_Time_Days,Reorder_Point,Unit_Cost
+SKU001,Chicken Breast,500,300,7,350,4.5
+SKU002,Pasta,1200,400,3,200,1.2
+SKU003,Olive Oil,150,200,14,400,6.8
+SKU004,Tomato Sauce,800,250,5,300,2.4
+SKU005,Broccoli,100,350,3,200,1.5
+SKU006,Salmon,300,280,10,450,8.5
+SKU007,Rice,2000,300,3,150,0.9
+SKU008,Garlic,80,150,7,200,0.6
+SKU009,Tofu,90,210,5,180,2.1
+SKU010,Shrimp,60,140,12,250,9.2
