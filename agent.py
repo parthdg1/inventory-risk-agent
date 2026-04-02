@@ -7,15 +7,19 @@ from tools import (
     get_reorder_recommendations,
     get_summary_metrics,
     prepare_context_table,
+    project_future_inventory
 )
 from llm_helper import generate_planner_summary, answer_inventory_question
 
 
 class InventoryRiskAgent:
+    REQUIRED_COLUMNS = ["sku", "inventory", "demand", "lead_time", "unit_cost"]
+    
     def __init__(self, file):
         self.raw_df = load_inventory_data(file)
         self.metrics_df = calculate_inventory_metrics(self.raw_df)
         self.risk_df = classify_inventory_risk(self.metrics_df)
+        self.forecast_df = project_future_inventory(self.raw_df)
 
     def route(self, user_question: str) -> dict:
         q = user_question.lower()
@@ -74,4 +78,5 @@ class InventoryRiskAgent:
             "top_risks": get_top_risks(self.risk_df),
             "urgent_items": get_urgent_items(self.risk_df),
             "reorder_recommendations": get_reorder_recommendations(self.risk_df),
+            "forecast_view": self.forecast_df
         }

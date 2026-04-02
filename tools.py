@@ -1,5 +1,6 @@
 import pandas as pd
-
+import numpy as np
+from sklearn.linear_model import LinearRegression
 
 def load_inventory_data(file) -> pd.DataFrame:
     df = pd.read_csv(file)
@@ -128,3 +129,112 @@ def prepare_context_table(df: pd.DataFrame, limit: int = 10) -> str:
     small_df = small_df.round(2)
 
     return small_df.to_csv(index=False)
+
+def project_future_inventory(df, weeks_ahead=4, growth_rate=0.0):
+    """
+    Project future demand and inventory using current weekly demand.
+    
+    growth_rate:
+        0.0  = baseline forecast
+        0.10 = 10% demand growth scenario
+       -0.10 = 10% demand decline scenario
+    """
+
+    df = df.copy()
+
+    df["projected_weekly_demand"] = df["Weekly_Demand"] * (1 + growth_rate)
+    df["projected_demand_next_4_weeks"] = df["projected_weekly_demand"] * weeks_ahead
+    df["projected_inventory_after_4_weeks"] = (
+        df["Current_Stock"] - df["projected_demand_next_4_weeks"]
+    )
+
+    df["weeks_of_cover"] = np.where(
+        df["Weekly_Demand"] > 0,
+        df["Current_Stock"] / df["Weekly_Demand"],
+        np.inf
+    )
+
+    df["projected_stockout_risk"] = np.select(
+        [
+            df["projected_inventory_after_4_weeks"] < 0,
+            df["weeks_of_cover"] < 1,
+            df["weeks_of_cover"] < 2
+        ],
+        [
+            "Projected Stockout",
+            "High Risk",
+            "Medium Risk"
+        ],
+        default="Low Risk"
+    )
+
+    return df
+
+
+def forecast_demand(df, periods=7):
+    """
+    Forecast demand using simple linear regression trend.
+    Requires columns: sku, date, demand
+    """
+
+    df = df.copy()
+    df["date"] = pd.to_datetime(df["date"])
+
+    forecasts = []
+
+    for sku, group in df.groupby("sku"):
+        group = group.sort_values("date")
+
+        if len(group) < 3:
+            continue
+
+        X = np.arange(len(group)).reshape(-1, 1)
+        y = group["demand"].values
+
+        model = LinearRegression()
+        model.fit(X, y)
+
+        future_X = np.arange(len(group), len(group) + periods).reshape(-1, 1)
+        preds = model.predict(future_X)
+
+        preds = np.clip(preds, 0, None)
+
+        forecasts.append({
+            "sku": sku,
+            "forecast_demand_next_7_days": round(float(preds.sum()), 2),
+            "forecast_avg_daily_demand": round(float(preds.mean()), 2)
+        })
+
+    return pd.DataFrame(forecasts)
+
+def merge_forecast_with_inventory(inventory_df, forecast_df):
+    
+    merged_df = inventory_df.merge(forecast_df, on="sku", how="left")
+
+    merged_df["forecast_demand_next_7_days"] = merged_df["forecast_demand_next_7_days"].fillna(0)
+    merged_df["forecast_avg_daily_demand"] = merged_df["forecast_avg_daily_demand"].fillna(0)
+
+    merged_df["projected_inventory_after_7_days"] = (
+        merged_df["inventory"] - merged_df["forecast_demand_next_7_days"]
+    )
+
+    return merged_df
+
+def classify_forecast_risk(df):
+    
+    df = df.copy()
+
+    df["forecast_risk"] = np.select(
+        [
+            df["projected_inventory_after_7_days"] < 0,
+            df["projected_inventory_after_7_days"] < df["inventory"] * 0.2
+        ],
+        [
+            "Projected Stockout",
+            "Low Inventory Risk"
+        ],
+        default="Safe"
+    )
+
+    return df
+
